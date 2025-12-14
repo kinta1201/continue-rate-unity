@@ -1,7 +1,3 @@
-// Assets/Editor/SceneAutoBuilder.cs
-// Unity 2022.3 LTS
-// 冪等：Rebuildを何回実行しても同一のシーン構成を再生成する
-
 #if UNITY_EDITOR
 using System.IO;
 using UnityEditor;
@@ -32,21 +28,15 @@ public static class SceneAutoBuilder
     {
         EnsureScenesFolder();
 
-        // Title
         BuildTitleScene();
-
-        // ModeSelect
-        BuildSimpleNavScene(ModeSelectSceneName, "Go Game", GameSceneName);
-
-        // Game
-        BuildSimpleNavScene(GameSceneName, "To Result", ResultSceneName);
-
-        // Result
-        BuildSimpleNavScene(ResultSceneName, "Back Title", TitleSceneName);
+        BuildNavScene(ModeSelectSceneName, "Go Game", GameSceneName);
+        BuildGameScene();
+        BuildNavScene(ResultSceneName, "Back Title", TitleSceneName);
 
         ApplyBuildSettings();
 
-        Debug.Log("[SceneAutoBuilder] Rebuild All Scenes done.");
+        EditorUtility.DisplayDialog("Scene生成完了", "全シーン自動生成・上書きが完了しました。", "OK");
+        Debug.Log("[SceneAutoBuilder] Rebuild All Scenes completed.");
     }
 
     [MenuItem("Tools/AutoBuild/Apply Build Settings")]
@@ -60,48 +50,44 @@ public static class SceneAutoBuilder
         }
 
         EditorBuildSettings.scenes = scenes;
-        Debug.Log("[SceneAutoBuilder] Build Settings updated (Scenes In Build applied).");
+        Debug.Log("[SceneAutoBuilder] Build Settings updated.");
     }
 
     [MenuItem("Tools/AutoBuild/Open Title Scene")]
     public static void OpenTitleScene()
     {
-        string path = GetScenePath(TitleSceneName);
-        if (!File.Exists(path))
-        {
-            Debug.LogError($"[SceneAutoBuilder] Title scene not found: {path}. Run Rebuild All Scenes first.");
-            return;
-        }
+        var path = GetScenePath(TitleSceneName);
         EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
     }
 
-    // ------------------------
+    // -----------------------------
     // Scene Builders
-    // ------------------------
+    // -----------------------------
 
     private static void BuildTitleScene()
     {
-        // 重要：新規シーンを作り直す（冪等 & 生成漏れ防止）
+        Debug.Log("[SceneAutoBuilder] Building Title...");
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
         scene.name = TitleSceneName;
 
-        // 必ずUIを生成（今回の不具合の根絶）
         EnsureEventSystem(scene);
         var canvas = EnsureCanvas(scene);
 
-        // 見出し
         CreateHeaderText(canvas.transform, "TITLE");
 
-        // Button: Start -> ModeSelect
         var button = CreateButton(canvas.transform, "Start", new Vector2(0, -40));
-        WireButtonToLoadScene(button, ModeSelectSceneName);
 
-        SaveActiveSceneAs(TitleSceneName);
-        Debug.Log("[SceneAutoBuilder] Title scene built with Canvas/EventSystem/Button and saved.");
+        // ★ OnClickは使わない：クリックは RuntimeSceneLoader(IPointerClickHandler) が拾う
+        var loader = button.gameObject.GetComponent<RuntimeSceneLoader>() ??
+                     button.gameObject.AddComponent<RuntimeSceneLoader>();
+        loader.SceneName = ModeSelectSceneName;
+
+        SaveScene(scene, TitleSceneName);
     }
 
-    private static void BuildSimpleNavScene(string sceneName, string buttonLabel, string nextSceneName)
+    private static void BuildNavScene(string sceneName, string buttonLabel, string nextSceneName)
     {
+        Debug.Log($"[SceneAutoBuilder] Building {sceneName}...");
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
         scene.name = sceneName;
 
@@ -111,15 +97,37 @@ public static class SceneAutoBuilder
         CreateHeaderText(canvas.transform, sceneName.ToUpperInvariant());
 
         var button = CreateButton(canvas.transform, buttonLabel, new Vector2(0, -40));
-        WireButtonToLoadScene(button, nextSceneName);
 
-        SaveActiveSceneAs(sceneName);
-        Debug.Log($"[SceneAutoBuilder] {sceneName} scene built and saved.");
+        var loader = button.gameObject.GetComponent<RuntimeSceneLoader>() ??
+                     button.gameObject.AddComponent<RuntimeSceneLoader>();
+        loader.SceneName = nextSceneName;
+
+        SaveScene(scene, sceneName);
     }
 
-    // ------------------------
-    // UI Helpers
-    // ------------------------
+    private static void BuildGameScene()
+    {
+        Debug.Log("[SceneAutoBuilder] Building Game...");
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+        scene.name = GameSceneName;
+
+        EnsureEventSystem(scene);
+        var canvas = EnsureCanvas(scene);
+
+        CreateHeaderText(canvas.transform, "GAME");
+
+        var button = CreateButton(canvas.transform, "Door", new Vector2(0, -40));
+
+        var loader = button.gameObject.GetComponent<RuntimeSceneLoader>() ??
+                     button.gameObject.AddComponent<RuntimeSceneLoader>();
+        loader.SceneName = ResultSceneName;
+
+        SaveScene(scene, GameSceneName);
+    }
+
+    // -----------------------------
+    // Helpers
+    // -----------------------------
 
     private static void EnsureScenesFolder()
     {
@@ -127,33 +135,36 @@ public static class SceneAutoBuilder
         {
             Directory.CreateDirectory(ScenesFolder);
             AssetDatabase.Refresh();
-            Debug.Log($"[SceneAutoBuilder] Created folder: {ScenesFolder}");
         }
     }
 
-    private static string GetScenePath(string sceneName)
-        => $"{ScenesFolder}/{sceneName}.unity";
+    private static string GetScenePath(string sceneName) => $"{ScenesFolder}/{sceneName}.unity";
 
-    private static void SaveActiveSceneAs(string sceneName)
+    private static void SaveScene(Scene scene, string sceneName)
     {
         string path = GetScenePath(sceneName);
-
-        // 既存があっても上書き（冪等）
-        bool ok = EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), path);
-        if (!ok)
-        {
-            Debug.LogError($"[SceneAutoBuilder] Failed to save scene: {path}");
-        }
+        bool ok = EditorSceneManager.SaveScene(scene, path);
+        if (!ok) Debug.LogError($"[SceneAutoBuilder] Failed to save scene: {path}");
+        else Debug.Log($"[SceneAutoBuilder] Scene saved: {path}");
     }
 
     private static void EnsureEventSystem(Scene scene)
     {
-        // シーン内に既に存在するなら作らない
+        // NewSceneMode.Singleなので基本はこれでOK
         if (Object.FindObjectOfType<EventSystem>() != null) return;
 
         var es = new GameObject("EventSystem");
         es.AddComponent<EventSystem>();
+
+        // 入力システム差でクリックが死なないように分岐（両対応）
+#if ENABLE_INPUT_SYSTEM
+        es.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+#elif ENABLE_LEGACY_INPUT_MANAGER
         es.AddComponent<StandaloneInputModule>();
+#else
+        es.AddComponent<StandaloneInputModule>();
+#endif
+
         SceneManager.MoveGameObjectToScene(es, scene);
     }
 
@@ -165,7 +176,6 @@ public static class SceneAutoBuilder
         var canvasGO = new GameObject("Canvas");
         var canvas = canvasGO.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
         canvasGO.AddComponent<CanvasScaler>();
         canvasGO.AddComponent<GraphicRaycaster>();
 
@@ -207,10 +217,11 @@ public static class SceneAutoBuilder
 
         var image = buttonGO.AddComponent<Image>();
         image.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+        image.raycastTarget = true;
 
+        // Buttonは見た目用に残してOK（OnClickは使わない）
         var button = buttonGO.AddComponent<Button>();
 
-        // 子Text
         var textGO = new GameObject("Text");
         textGO.transform.SetParent(buttonGO.transform, false);
 
@@ -226,38 +237,9 @@ public static class SceneAutoBuilder
         uiText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         uiText.fontSize = 28;
         uiText.color = Color.black;
+        uiText.raycastTarget = false;
 
         return button;
-    }
-
-    private static void WireButtonToLoadScene(Button button, string sceneName)
-    {
-        // ランタイムで SceneManager.LoadScene(sceneName) を呼ぶだけのシンプルな実装に固定
-        // ※ ここは「SceneNavigator」等に変えたいなら後で統一する
-        var go = button.gameObject;
-        var loader = go.GetComponent<RuntimeSceneLoader>();
-        if (loader == null) loader = go.AddComponent<RuntimeSceneLoader>();
-        loader.SceneName = sceneName;
-
-        button.onClick.RemoveAllListeners();
-        button.onClick.AddListener(loader.Load);
-    }
-}
-
-// ランタイム用コンポーネント（Editor生成物に貼り付けるためEditorフォルダ外に置きたいが、
-// まずは不具合修正優先で同ファイル内定義 → 後で Assets/Scripts/Runtime に移動可）
-public class RuntimeSceneLoader : MonoBehaviour
-{
-    public string SceneName;
-
-    public void Load()
-    {
-        if (string.IsNullOrEmpty(SceneName))
-        {
-            Debug.LogError("[RuntimeSceneLoader] SceneName is empty.");
-            return;
-        }
-        UnityEngine.SceneManagement.SceneManager.LoadScene(SceneName);
     }
 }
 #endif
