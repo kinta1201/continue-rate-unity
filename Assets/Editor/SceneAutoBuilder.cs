@@ -188,7 +188,7 @@ public static class SceneAutoBuilder
         var uiText = go.AddComponent<Text>();
         uiText.text = text;
         uiText.alignment = TextAnchor.MiddleCenter;
-        uiText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        uiText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         uiText.fontSize = 36;
         uiText.color = Color.black;
     }
@@ -223,7 +223,7 @@ public static class SceneAutoBuilder
         var uiText = textGO.AddComponent<Text>();
         uiText.text = label;
         uiText.alignment = TextAnchor.MiddleCenter;
-        uiText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        uiText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         uiText.fontSize = 28;
         uiText.color = Color.black;
 
