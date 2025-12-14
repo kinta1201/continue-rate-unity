@@ -22,7 +22,7 @@ public static class SceneAutoBuilder
 
         BuildTitleScene();
         BuildSimpleNavScene(ModeSelectSceneName, "Go Game", GameSceneName);
-        BuildGameScene(); // ★プロトタイプ版
+        BuildGameScene(); // UIプロトタイプ生成のみ（Controllerは付けない）
         BuildSimpleNavScene(ResultSceneName, "Back Title", TitleSceneName);
 
         ApplyBuildSettings();
@@ -77,11 +77,11 @@ public static class SceneAutoBuilder
     }
 
     /// <summary>
-    /// Gameシーン：継続率体感/当て を1画面で体験できるプロトタイプUIを自動生成
+    /// Gameシーン：継続率体感/当て を1画面で体験できるプロトタイプUIを自動生成（UIのみ）
     /// </summary>
     private static void BuildGameScene()
     {
-        Debug.Log("[SceneAutoBuilder] Building Game (Prototype)...");
+        Debug.Log("[SceneAutoBuilder] Building Game (Prototype UI only)...");
 
         var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
         scene.name = GameSceneName;
@@ -113,15 +113,6 @@ public static class SceneAutoBuilder
         var nextLabel = nextButton.transform.Find("Text")?.GetComponent<Text>();
         if (nextLabel != null) nextLabel.name = "NextOrRetryLabel";
 
-        // ---- Controller (attach to Canvas) ----
-        canvas.gameObject.GetComponent<ContinueRateGameScenePrototype>()
-var existing = canvas.gameObject.GetComponent<ContinueRateGameScenePrototype>();
-if (existing == null)
-{
-    canvas.gameObject.AddComponent<ContinueRateGameScenePrototype>();
-}
-
-
         SaveScene(scene, GameSceneName);
     }
 
@@ -148,7 +139,6 @@ if (existing == null)
         var es = new GameObject("EventSystem");
         es.AddComponent<EventSystem>();
 
-        // 入力差でクリック死なないように（両対応）
 #if ENABLE_INPUT_SYSTEM
         es.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
 #else
@@ -160,7 +150,6 @@ if (existing == null)
 
     private static Canvas EnsureCanvas(Scene scene)
     {
-        // 既存があれば使う（NewSceneなので基本無いが保険）
         var existing = Object.FindObjectOfType<Canvas>();
         if (existing != null) return existing;
 
@@ -235,7 +224,6 @@ if (existing == null)
         slider.wholeNumbers = true;
         slider.value = 80;
 
-        // Background
         var bg = new GameObject("Background");
         bg.transform.SetParent(go.transform, false);
         var bgImg = bg.AddComponent<Image>();
@@ -246,7 +234,6 @@ if (existing == null)
         bgRt.offsetMin = Vector2.zero;
         bgRt.offsetMax = Vector2.zero;
 
-        // Fill Area
         var fillArea = new GameObject("Fill Area");
         fillArea.transform.SetParent(go.transform, false);
         var faRt = fillArea.AddComponent<RectTransform>();
@@ -255,7 +242,6 @@ if (existing == null)
         faRt.offsetMin = new Vector2(10, 0);
         faRt.offsetMax = new Vector2(-10, 0);
 
-        // Fill
         var fill = new GameObject("Fill");
         fill.transform.SetParent(fillArea.transform, false);
         var fillImg = fill.AddComponent<Image>();
@@ -266,7 +252,6 @@ if (existing == null)
         fillRt.offsetMin = Vector2.zero;
         fillRt.offsetMax = Vector2.zero;
 
-        // Handle Slide Area
         var handleArea = new GameObject("Handle Slide Area");
         handleArea.transform.SetParent(go.transform, false);
         var haRt = handleArea.AddComponent<RectTransform>();
@@ -275,11 +260,10 @@ if (existing == null)
         haRt.offsetMin = new Vector2(10, 0);
         haRt.offsetMax = new Vector2(-10, 0);
 
-        // Handle
         var handle = new GameObject("Handle");
         handle.transform.SetParent(handleArea.transform, false);
         var handleImg = handle.AddComponent<Image>();
-        handleImg.color = new Color(1f, 1f, 1f, 1f);
+        handleImg.color = Color.white;
         var handleRt = handle.GetComponent<RectTransform>();
         handleRt.sizeDelta = new Vector2(24, 24);
 
@@ -309,7 +293,6 @@ if (existing == null)
         var dd = go.AddComponent<Dropdown>();
         dd.targetGraphic = img;
 
-        // Label
         var labelGO = new GameObject("Label");
         labelGO.transform.SetParent(go.transform, false);
         var label = labelGO.AddComponent<Text>();
@@ -318,7 +301,6 @@ if (existing == null)
         label.color = Color.black;
         label.alignment = TextAnchor.MiddleLeft;
         label.text = "継続率体感モード";
-
         var lrt = labelGO.GetComponent<RectTransform>();
         lrt.anchorMin = Vector2.zero;
         lrt.anchorMax = Vector2.one;
@@ -327,7 +309,6 @@ if (existing == null)
 
         dd.captionText = label;
 
-        // Minimal Template (required by Dropdown)
         var templateGO = new GameObject("Template");
         templateGO.SetActive(false);
         templateGO.transform.SetParent(go.transform, false);
@@ -382,7 +363,6 @@ if (existing == null)
         itemLabel.color = Color.black;
         itemLabel.alignment = TextAnchor.MiddleLeft;
         itemLabel.text = "Option";
-
         var ilrt = itemLabelGO.GetComponent<RectTransform>();
         ilrt.anchorMin = Vector2.zero;
         ilrt.anchorMax = Vector2.one;
@@ -392,7 +372,6 @@ if (existing == null)
         dd.template = templateRT;
         dd.itemText = itemLabel;
 
-        // optionsは ContinueRateGameScenePrototype が Start() で入れる
         return dd;
     }
 
