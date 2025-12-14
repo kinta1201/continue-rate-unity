@@ -1,0 +1,70 @@
+using UnityEngine;
+
+public enum GameMode
+{
+    None = 0,
+    Experience = 1, // 継続率体感
+    Guess = 2       // 継続率当て（後で）
+}
+
+public class GameManager : MonoBehaviour
+{
+    public static GameManager Instance { get; private set; }
+
+    public GameMode CurrentMode { get; private set; } = GameMode.Experience;
+
+    /// <summary>内部の継続率(1-100)</summary>
+    public int ActualRatePercent { get; private set; } = 50;
+
+    /// <summary>直近の結果（true=継続, false=離脱）</summary>
+    public bool LastContinued { get; private set; } = false;
+
+    /// <summary>直近の乱数(0-99)</summary>
+    public int LastRoll { get; private set; } = -1;
+
+    public int Streak { get; private set; } = 0;
+    public int BestStreak { get; private set; } = 0;
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
+    }
+
+    /// <summary>新規ゲーム開始（継続率を設定）</summary>
+    public void StartNewGame(int actualRatePercent, GameMode mode = GameMode.Experience)
+    {
+        CurrentMode = mode;
+        ActualRatePercent = Mathf.Clamp(actualRatePercent, 1, 100);
+
+        // streakは「連続」なので、新規ゲーム開始時はリセット推奨
+        Streak = 0;
+
+        // 直近結果もリセット
+        LastContinued = false;
+        LastRoll = -1;
+    }
+
+    /// <summary>Doorを押した1回分の抽選</summary>
+    public void ResolveDoorAttempt()
+    {
+        // 0-99
+        LastRoll = Random.Range(0, 100);
+        LastContinued = LastRoll < ActualRatePercent;
+
+        if (LastContinued)
+        {
+            Streak++;
+            if (Streak > BestStreak) BestStreak = Streak;
+        }
+        else
+        {
+            Streak = 0;
+        }
+    }
+}

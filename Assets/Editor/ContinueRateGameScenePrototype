@@ -1,0 +1,214 @@
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// Gameシーンだけで「継続率体感 / 当て」を体験できるプロトタイプ
+/// - 体感モード: 継続率をスライダーで設定
+/// - 当てモード: 1〜100%を内部でランダム設定（画面には非表示）
+/// - ドアを押す→成功/失敗→成功なら次へ、失敗ならドボン＆連続数表示
+/// </summary>
+public class ContinueRateGameScenePrototype : MonoBehaviour
+{
+    public enum Mode
+    {
+        Experience = 0,
+        Guess = 1
+    }
+
+    [Header("UI (AutoBuild生成物をFindして自動接続)")]
+    [SerializeField] private Dropdown modeDropdown;
+    [SerializeField] private Slider rateSlider;
+    [SerializeField] private Text rateLabel;
+    [SerializeField] private Button doorButton;
+    [SerializeField] private Text doorLabel;
+    [SerializeField] private Text infoText;
+    [SerializeField] private Button nextOrRetryButton;
+    [SerializeField] private Text nextOrRetryLabel;
+
+    private Mode mode = Mode.Experience;
+
+    private int actualRate;       // 今のステージの真の継続率(1-100)
+    private int streak = 0;       // 連続成功
+    private int bestStreak = 0;   // 最高連続
+    private bool waitingNext = false;
+
+    private void Awake()
+    {
+        // AutoBuildで生成した名前から拾う（手動参照ゼロ）
+        modeDropdown = modeDropdown ?? GameObject.Find("ModeDropdown")?.GetComponent<Dropdown>();
+        rateSlider = rateSlider ?? GameObject.Find("RateSlider")?.GetComponent<Slider>();
+        rateLabel = rateLabel ?? GameObject.Find("RateLabel")?.GetComponent<Text>();
+        doorButton = doorButton ?? GameObject.Find("DoorButton")?.GetComponent<Button>();
+        doorLabel = doorLabel ?? GameObject.Find("DoorLabel")?.GetComponent<Text>();
+        infoText = infoText ?? GameObject.Find("InfoText")?.GetComponent<Text>();
+        nextOrRetryButton = nextOrRetryButton ?? GameObject.Find("NextOrRetryButton")?.GetComponent<Button>();
+        nextOrRetryLabel = nextOrRetryLabel ?? GameObject.Find("NextOrRetryLabel")?.GetComponent<Text>();
+    }
+
+    private void Start()
+    {
+        // UI初期化
+        if (modeDropdown != null)
+        {
+            modeDropdown.ClearOptions();
+            modeDropdown.AddOptions(new System.Collections.Generic.List<string>
+            {
+                "継続率体感モード",
+                "継続率当てモード"
+            });
+            modeDropdown.onValueChanged.AddListener(OnModeChanged);
+            modeDropdown.value = 0;
+        }
+
+        if (rateSlider != null)
+        {
+            rateSlider.minValue = 1;
+            rateSlider.maxValue = 100;
+            rateSlider.wholeNumbers = true;
+            rateSlider.value = 80; // デフォで80%
+            rateSlider.onValueChanged.AddListener(_ => RefreshRateLabel());
+        }
+
+        if (doorButton != null)
+        {
+            doorButton.onClick.RemoveAllListeners();
+            doorButton.onClick.AddListener(OnDoorPressed);
+        }
+
+        if (nextOrRetryButton != null)
+        {
+            nextOrRetryButton.onClick.RemoveAllListeners();
+            nextOrRetryButton.onClick.AddListener(OnNextOrRetry);
+        }
+
+        ApplyModeUI();
+        BeginNewStage();
+        Render();
+    }
+
+    private void OnModeChanged(int v)
+    {
+        mode = (v == 0) ? Mode.Experience : Mode.Guess;
+        ApplyModeUI();
+
+        // モード変えたらリセットして即体験できるように
+        streak = 0;
+        waitingNext = false;
+        BeginNewStage();
+        Render();
+    }
+
+    private void ApplyModeUI()
+    {
+        // 体感モードはスライダー表示、当てモードは隠す
+        if (rateSlider != null) rateSlider.gameObject.SetActive(mode == Mode.Experience);
+        if (rateLabel != null)  rateLabel.gameObject.SetActive(mode == Mode.Experience);
+        RefreshRateLabel();
+    }
+
+    private void RefreshRateLabel()
+    {
+        if (rateLabel == null || rateSlider == null) return;
+        rateLabel.text = $"設定継続率：{(int)rateSlider.value}%";
+    }
+
+    private void BeginNewStage()
+    {
+        if (mode == Mode.Experience)
+        {
+            actualRate = Mathf.Clamp((int)rateSlider.value, 1, 100);
+        }
+        else
+        {
+            actualRate = Random.Range(1, 101); // 1〜100
+        }
+    }
+
+    private void OnDoorPressed()
+    {
+        if (waitingNext) return; // 結果待ち中は無視
+
+        // 抽選
+        int roll = Random.Range(0, 100); // 0〜99
+        bool success = roll < actualRate;
+
+        if (success)
+        {
+            streak++;
+            bestStreak = Mathf.Max(bestStreak, streak);
+            waitingNext = true;
+
+            if (infoText != null)
+            {
+                string rateShown = (mode == Mode.Experience) ? $"{actualRate}%" : "？？%";
+                infoText.text =
+                    $"✅ 正解！ 継続した！\n" +
+                    $"（抽選：{roll} / 継続率：{rateShown}）\n\n" +
+                    $"連続：{streak}  / 最高：{bestStreak}";
+            }
+
+            if (nextOrRetryLabel != null) nextOrRetryLabel.text = "次のステージへ";
+        }
+        else
+        {
+            // ドボン
+            int lastStreak = streak;
+            streak = 0;
+            waitingNext = true;
+
+            if (infoText != null)
+            {
+                string rateShown = (mode == Mode.Experience) ? $"{actualRate}%" : "？？%";
+                infoText.text =
+                    $"💥 ドボン！ 失敗…\n" +
+                    $"（抽選：{roll} / 継続率：{rateShown}）\n\n" +
+                    $"今回の連続：{lastStreak}  / 最高：{bestStreak}";
+            }
+
+            if (nextOrRetryLabel != null) nextOrRetryLabel.text = "もう一回";
+        }
+
+        Render();
+    }
+
+    private void OnNextOrRetry()
+    {
+        if (!waitingNext) return;
+
+        waitingNext = false;
+        BeginNewStage();
+        Render();
+    }
+
+    private void Render()
+    {
+        // Door表示
+        if (doorLabel != null)
+        {
+            doorLabel.text = waitingNext ? "OK" : "Door";
+        }
+
+        // ボタン状態
+        if (doorButton != null) doorButton.interactable = !waitingNext;
+        if (nextOrRetryButton != null) nextOrRetryButton.interactable = waitingNext;
+
+        // 初期説明
+        if (infoText != null && !waitingNext)
+        {
+            if (mode == Mode.Experience)
+            {
+                infoText.text =
+                    "ドアを押して継続できるか体感しよう。\n" +
+                    "成功→次へ / 失敗→ドボン（連続数表示）\n\n" +
+                    $"連続：{streak} / 最高：{bestStreak}";
+            }
+            else
+            {
+                infoText.text =
+                    "継続率は非公開（1〜100%で内部設定）。\n" +
+                    "ドアを押して体感で当てよう。\n\n" +
+                    $"連続：{streak} / 最高：{bestStreak}";
+            }
+        }
+    }
+}

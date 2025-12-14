@@ -1,0 +1,24 @@
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
+
+/// <summary>
+/// GameシーンのDoorボタン用：抽選→Resultへ遷移
+/// </summary>
+public class DoorController : MonoBehaviour, IPointerClickHandler
+{
+    [SerializeField] private string resultSceneName = "Result";
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        // 念のため
+        if (GameManager.Instance == null)
+        {
+            Debug.LogError("[DoorController] GameManager is missing.");
+            return;
+        }
+
+        GameManager.Instance.ResolveDoorAttempt();
+        SceneManager.LoadScene(resultSceneName);
+    }
+}

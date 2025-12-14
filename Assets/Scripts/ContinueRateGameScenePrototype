@@ -1,0 +1,169 @@
+using UnityEngine;
+using UnityEngine.UI;
+
+public class ContinueRateGameScenePrototype : MonoBehaviour
+{
+    public enum Mode { Experience = 0, Guess = 1 }
+
+    [SerializeField] private Dropdown modeDropdown;
+    [SerializeField] private Slider rateSlider;
+    [SerializeField] private Text rateLabel;
+    [SerializeField] private Button doorButton;
+    [SerializeField] private Text doorLabel;
+    [SerializeField] private Text infoText;
+    [SerializeField] private Button nextOrRetryButton;
+    [SerializeField] private Text nextOrRetryLabel;
+
+    private Mode mode = Mode.Experience;
+
+    private int actualRate;      // 1-100
+    private int streak = 0;
+    private int bestStreak = 0;
+    private bool waitingNext = false;
+
+    private void Awake()
+    {
+        modeDropdown     = modeDropdown     ?? GameObject.Find("ModeDropdown")?.GetComponent<Dropdown>();
+        rateSlider       = rateSlider       ?? GameObject.Find("RateSlider")?.GetComponent<Slider>();
+        rateLabel        = rateLabel        ?? GameObject.Find("RateLabel")?.GetComponent<Text>();
+        doorButton       = doorButton       ?? GameObject.Find("DoorButton")?.GetComponent<Button>();
+        doorLabel        = doorLabel        ?? GameObject.Find("DoorLabel")?.GetComponent<Text>();
+        infoText         = infoText         ?? GameObject.Find("InfoText")?.GetComponent<Text>();
+        nextOrRetryButton= nextOrRetryButton?? GameObject.Find("NextOrRetryButton")?.GetComponent<Button>();
+        nextOrRetryLabel = nextOrRetryLabel ?? GameObject.Find("NextOrRetryLabel")?.GetComponent<Text>();
+    }
+
+    private void Start()
+    {
+        if (modeDropdown != null)
+        {
+            modeDropdown.ClearOptions();
+            modeDropdown.AddOptions(new System.Collections.Generic.List<string>
+            {
+                "継続率体感モード",
+                "継続率当てモード"
+            });
+            modeDropdown.onValueChanged.AddListener(OnModeChanged);
+            modeDropdown.value = 0;
+        }
+
+        if (rateSlider != null)
+        {
+            rateSlider.minValue = 1;
+            rateSlider.maxValue = 100;
+            rateSlider.wholeNumbers = true;
+            if (rateSlider.value < 1) rateSlider.value = 80;
+            rateSlider.onValueChanged.AddListener(_ => RefreshRateLabel());
+        }
+
+        if (doorButton != null)
+        {
+            doorButton.onClick.RemoveAllListeners();
+            doorButton.onClick.AddListener(OnDoorPressed);
+        }
+
+        if (nextOrRetryButton != null)
+        {
+            nextOrRetryButton.onClick.RemoveAllListeners();
+            nextOrRetryButton.onClick.AddListener(OnNextOrRetry);
+        }
+
+        ApplyModeUI();
+        BeginNewStage();
+        Render();
+    }
+
+    private void OnModeChanged(int v)
+    {
+        mode = (v == 0) ? Mode.Experience : Mode.Guess;
+
+        streak = 0;
+        waitingNext = false;
+
+        ApplyModeUI();
+        BeginNewStage();
+        Render();
+    }
+
+    private void ApplyModeUI()
+    {
+        bool showRate = (mode == Mode.Experience);
+        if (rateSlider != null) rateSlider.gameObject.SetActive(showRate);
+        if (rateLabel  != null) rateLabel.gameObject.SetActive(showRate);
+        RefreshRateLabel();
+    }
+
+    private void RefreshRateLabel()
+    {
+        if (rateLabel == null || rateSlider == null) return;
+        rateLabel.text = $"設定継続率：{(int)rateSlider.value}%";
+    }
+
+    private void BeginNewStage()
+    {
+        if (mode == Mode.Experience)
+            actualRate = Mathf.Clamp((int)rateSlider.value, 1, 100);
+        else
+            actualRate = Random.Range(1, 101);
+    }
+
+    private void OnDoorPressed()
+    {
+        if (waitingNext) return;
+
+        int roll = Random.Range(0, 100);
+        bool success = roll < actualRate;
+
+        if (success)
+        {
+            streak++;
+            bestStreak = Mathf.Max(bestStreak, streak);
+            waitingNext = true;
+
+            string rateShown = (mode == Mode.Experience) ? $"{actualRate}%" : "？？%";
+            if (infoText != null)
+                infoText.text = $"✅ 正解！ 継続した！\n（抽選：{roll} / 継続率：{rateShown}）\n\n連続：{streak} / 最高：{bestStreak}";
+
+            if (nextOrRetryLabel != null) nextOrRetryLabel.text = "次のステージへ";
+        }
+        else
+        {
+            int lastStreak = streak;
+            streak = 0;
+            waitingNext = true;
+
+            string rateShown = (mode == Mode.Experience) ? $"{actualRate}%" : "？？%";
+            if (infoText != null)
+                infoText.text = $"💥 ドボン！ 失敗…\n（抽選：{roll} / 継続率：{rateShown}）\n\n今回の連続：{lastStreak} / 最高：{bestStreak}";
+
+            if (nextOrRetryLabel != null) nextOrRetryLabel.text = "もう一回";
+        }
+
+        Render();
+    }
+
+    private void OnNextOrRetry()
+    {
+        if (!waitingNext) return;
+
+        waitingNext = false;
+        BeginNewStage();
+        Render();
+    }
+
+    private void Render()
+    {
+        if (doorLabel != null) doorLabel.text = waitingNext ? "OK" : "Door";
+
+        if (doorButton != null) doorButton.interactable = !waitingNext;
+        if (nextOrRetryButton != null) nextOrRetryButton.interactable = waitingNext;
+
+        if (infoText != null && !waitingNext)
+        {
+            if (mode == Mode.Experience)
+                infoText.text = $"ドアを押して継続できるか体感しよう。\n成功→次へ / 失敗→ドボン\n\n連続：{streak} / 最高：{bestStreak}";
+            else
+                infoText.text = $"継続率は非公開（1〜100%）。\nドアを押して体感しよう。\n\n連続：{streak} / 最高：{bestStreak}";
+        }
+    }
+}

@@ -1,0 +1,16 @@
+using UnityEngine;
+
+public static class GameBootstrap
+{
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void EnsureGameManager()
+    {
+        if (GameManager.Instance != null) return;
+
+        var go = new GameObject("GameManager");
+        go.AddComponent<GameManager>();
+
+        // 初期値（とりあえず50%）
+        GameManager.Instance.StartNewGame(50, GameMode.Experience);
+    }
+}
