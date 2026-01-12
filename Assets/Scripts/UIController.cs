@@ -1,9 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// UI画面切替とテキスト更新を担当
-/// </summary>
 public class UIController : MonoBehaviour
 {
     [Header("Screens")]
@@ -13,73 +10,129 @@ public class UIController : MonoBehaviour
     public GameObject playScreen;
     public GameObject resultScreen;
 
-    [Header("Rate Setting (Experience)")]
+    [Header("Rate Setting")]
     public Slider rateSlider;
     public Text rateText;
-    public Button playStartButton;
 
-    [Header("Play")]
+    [Header("Play Screen")]
     public Text streakText;
 
-    [Header("Result Common")]
+    [Header("Result Screen")]
+    public Text resultTitleText;
     public Text resultStreakText;
-    public Text resultRateText; // 体感モード用「設定した継続率」
-    public Button retryButton;
-    public Button backToModeSelectButton;
-
-    [Header("Guess Mode UI")]
+    public Text resultRateText;
     public GameObject guessInputGroup;
     public Slider guessSlider;
     public Text guessSliderText;
     public Button guessConfirmButton;
-    public Text actualRateText; // 初期非表示
+    public Text actualRateText;
 
-    private bool _guessConfirmed = false;
+    [Header("References")]
+    public DoorController doorController;
 
-    private void Start()
+    void Start()
     {
-        // 初期表示
-        ShowOnly(titleScreen);
+        ShowTitle();
 
+        // --- Rate Slider ---
         if (rateSlider != null)
         {
+            // intにしたいならここで固定
+            rateSlider.wholeNumbers = true;
             rateSlider.minValue = 1;
             rateSlider.maxValue = 100;
-            rateSlider.wholeNumbers = true;
-            rateSlider.value = 50;
+
+            // 多重登録防止
+            rateSlider.onValueChanged.RemoveListener(OnRateSliderChanged);
             rateSlider.onValueChanged.AddListener(OnRateSliderChanged);
-            OnRateSliderChanged(rateSlider.value);
+
+            // 初回表示を確実に更新
+            SyncRateUIFromGameManager();
         }
 
+        // --- Guess Slider ---
         if (guessSlider != null)
         {
+            guessSlider.wholeNumbers = true;
             guessSlider.minValue = 1;
             guessSlider.maxValue = 100;
-            guessSlider.wholeNumbers = true;
-            guessSlider.value = 50;
+
+            guessSlider.onValueChanged.RemoveListener(OnGuessSliderChanged);
             guessSlider.onValueChanged.AddListener(OnGuessSliderChanged);
             OnGuessSliderChanged(guessSlider.value);
         }
-
-        if (actualRateText != null) actualRateText.gameObject.SetActive(false);
-        if (guessInputGroup != null) guessInputGroup.SetActive(false);
     }
 
-    // ---- Screen helpers ----
-    private void ShowOnly(GameObject active)
+    void HideAllScreens()
     {
-        if (titleScreen != null) titleScreen.SetActive(active == titleScreen);
-        if (modeSelectScreen != null) modeSelectScreen.SetActive(active == modeSelectScreen);
-        if (rateSettingScreen != null) rateSettingScreen.SetActive(active == rateSettingScreen);
-        if (playScreen != null) playScreen.SetActive(active == playScreen);
-        if (resultScreen != null) resultScreen.SetActive(active == resultScreen);
+        titleScreen.SetActive(false);
+        modeSelectScreen.SetActive(false);
+        rateSettingScreen.SetActive(false);
+        playScreen.SetActive(false);
+        resultScreen.SetActive(false);
     }
 
-    public void ShowTitle() => ShowOnly(titleScreen);
+    public void ShowTitle()
+    {
+        HideAllScreens();
+        titleScreen.SetActive(true);
+        GameManager.Instance.SetMode(GameManager.GameMode.None);
+    }
 
-    public void ShowModeSelect() => ShowOnly(modeSelectScreen);
+    public void ShowModeSelect()
+    {
+        HideAllScreens();
+        modeSelectScreen.SetActive(true);
+    }
 
-    // ---- Button handlers ----
+    public void ShowRateSetting()
+    {
+        HideAllScreens();
+        rateSettingScreen.SetActive(true);
+
+        // ここが肝：画面を開いた瞬間に必ず表示更新
+        SyncRateUIFromGameManager();
+    }
+
+    public void ShowPlay()
+    {
+        HideAllScreens();
+        playScreen.SetActive(true);
+        GameManager.Instance.ResetStreak();
+        UpdateStreakText();
+        doorController.ResetDoor();
+    }
+
+    public void ShowResult()
+    {
+        HideAllScreens();
+        resultScreen.SetActive(true);
+
+        resultTitleText.text = "ゲームオーバー";
+        resultStreakText.text = $"連続成功：{GameManager.Instance.Streak}回";
+
+        if (GameManager.Instance.CurrentMode == GameManager.GameMode.Experience)
+        {
+            resultRateText.text = $"設定した継続率：{GameManager.Instance.ConfiguredRate}%";
+            resultRateText.gameObject.SetActive(true);
+            guessInputGroup.SetActive(false);
+            actualRateText.gameObject.SetActive(false);
+        }
+        else if (GameManager.Instance.CurrentMode == GameManager.GameMode.Guess)
+        {
+            resultRateText.gameObject.SetActive(false);
+            guessInputGroup.SetActive(true);
+            actualRateText.gameObject.SetActive(false);
+            guessConfirmButton.interactable = true;
+
+            if (guessSlider != null)
+            {
+                guessSlider.SetValueWithoutNotify(50);
+                OnGuessSliderChanged(guessSlider.value);
+            }
+        }
+    }
+
     public void OnStartButtonClicked()
     {
         ShowModeSelect();
@@ -87,31 +140,30 @@ public class UIController : MonoBehaviour
 
     public void OnExperienceModeSelected()
     {
-        GameManager.Instance.SetMode(GameMode.Experience);
-        ShowOnly(rateSettingScreen);
+        GameManager.Instance.SetMode(GameManager.GameMode.Experience);
+        ShowRateSetting();
     }
 
     public void OnGuessModeSelected()
     {
-        GameManager.Instance.SetMode(GameMode.Guess);
-        StartPlay();
+        GameManager.Instance.SetMode(GameManager.GameMode.Guess);
+        ShowPlay();
     }
 
     public void OnPlayStartClicked()
     {
-        int p = (rateSlider != null) ? Mathf.RoundToInt(rateSlider.value) : 50;
-        GameManager.Instance.SetConfiguredRate(p);
-        StartPlay();
+        int rate = Mathf.RoundToInt(rateSlider.value);
+        GameManager.Instance.SetConfiguredRate(rate);
+        ShowPlay();
     }
 
     public void OnRetryClicked()
     {
-        // 同モードで再プレイ。当てモードは新しい継続率にする
-        if (GameManager.Instance.CurrentMode == GameMode.Guess)
+        if (GameManager.Instance.CurrentMode == GameManager.GameMode.Guess)
         {
-            GameManager.Instance.SetMode(GameMode.Guess);
+            GameManager.Instance.SetMode(GameManager.GameMode.Guess);
         }
-        StartPlay();
+        ShowPlay();
     }
 
     public void OnBackToModeSelectClicked()
@@ -121,81 +173,58 @@ public class UIController : MonoBehaviour
 
     public void OnGuessConfirmClicked()
     {
-        _guessConfirmed = true;
-        int guess = (guessSlider != null) ? Mathf.RoundToInt(guessSlider.value) : 50;
+        guessConfirmButton.interactable = false;
 
-        if (actualRateText != null)
+        int guess = Mathf.RoundToInt(guessSlider.value);
+        GameManager.Instance.SetUserGuess(guess);
+
+        actualRateText.text = $"あなたの予想：{GameManager.Instance.UserGuess}%\n実際の継続率：{GameManager.Instance.ActualRate}%";
+        actualRateText.gameObject.SetActive(true);
+    }
+
+    void OnRateSliderChanged(float value)
+    {
+        int rate = Mathf.RoundToInt(value);
+
+        // 表示更新
+        if (rateText != null)
+            rateText.text = $"{rate}%";
+
+        // 常にGameManagerへ反映
+        if (GameManager.Instance != null)
+            GameManager.Instance.SetConfiguredRate(rate);
+    }
+
+    void OnGuessSliderChanged(float value)
+    {
+        int rate = Mathf.RoundToInt(value);
+        if (guessSliderText != null)
         {
-            actualRateText.text = $"実際の継続率：{GameManager.Instance.ActualRatePercent}%";
-            actualRateText.gameObject.SetActive(true);
-        }
-
-        // 予想値は「あなたの予想：XX%」として表示したければ、ここで追加Textを用意して更新してください
-        // 今回はスライダー表示だけでOKにしています。
-        if (guessConfirmButton != null) guessConfirmButton.interactable = false;
-    }
-
-    // ---- Slider handlers ----
-    private void OnRateSliderChanged(float v)
-    {
-        if (rateText != null) rateText.text = $"{Mathf.RoundToInt(v)}%";
-    }
-
-    private void OnGuessSliderChanged(float v)
-    {
-        if (guessSliderText != null) guessSliderText.text = $"{Mathf.RoundToInt(v)}%";
-    }
-
-    // ---- Play / Result ----
-    private void StartPlay()
-    {
-        _guessConfirmed = false;
-
-        GameManager.Instance.StartRun();
-        UpdateStreak(0);
-
-        // 結果画面の当てUI初期化
-        if (guessInputGroup != null) guessInputGroup.SetActive(false);
-        if (actualRateText != null) actualRateText.gameObject.SetActive(false);
-        if (guessConfirmButton != null) guessConfirmButton.interactable = true;
-
-        ShowOnly(playScreen);
-    }
-
-    public void UpdateStreak(int streak)
-    {
-        if (streakText != null) streakText.text = $"連続成功：{streak}";
-    }
-
-    public void ShowResult()
-    {
-        ShowOnly(resultScreen);
-
-        int streak = GameManager.Instance.Streak;
-        if (resultStreakText != null) resultStreakText.text = $"連続成功：{streak}";
-
-        if (GameManager.Instance.CurrentMode == GameMode.Experience)
-        {
-            if (resultRateText != null)
-            {
-                resultRateText.gameObject.SetActive(true);
-                resultRateText.text = $"設定した継続率：{GameManager.Instance.ConfiguredRatePercent}%";
-            }
-            if (guessInputGroup != null) guessInputGroup.SetActive(false);
-            if (actualRateText != null) actualRateText.gameObject.SetActive(false);
-        }
-        else // Guess
-        {
-            if (resultRateText != null) resultRateText.gameObject.SetActive(false);
-            if (guessInputGroup != null) guessInputGroup.SetActive(true);
-            if (actualRateText != null) actualRateText.gameObject.SetActive(false);
-            if (guessConfirmButton != null) guessConfirmButton.interactable = true;
+            guessSliderText.text = $"{rate}%";
         }
     }
 
-    // ---- PlayScreenアクティブ判定 ----
-    public bool IsPlayScreenActive()
+    public void UpdateStreakText()
     {
-        return playScreen != null && playScreen.activeInHierarchy;
+        streakText.text = $"連続成功：{GameManager.Instance.Streak}";
+    }
+
+    // ===== 追加: GameManagerの値をUIへ確実に反映 =====
+    private void SyncRateUIFromGameManager()
+    {
+        if (rateSlider == null || rateText == null) return;
+
+        // GameManagerがいなければ適当に50
+        int current = 50;
+
+        if (GameManager.Instance != null)
+        {
+            // ここは今のGameManagerの変数名に合わせてる（あなたの貼ったUIControllerに合わせてConfiguredRate）
+            current = Mathf.Clamp(GameManager.Instance.ConfiguredRate, 1, 100);
+        }
+
+        // onValueChangedを発火させずにUI値だけ合わせる → その後に手動で表示更新
+        rateSlider.SetValueWithoutNotify(current);
+        rateText.text = $"{current}%";
     }
 }

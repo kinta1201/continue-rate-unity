@@ -1,63 +1,96 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using System;
+using System.Collections;
 
-/// <summary>
-/// 演出のみ（ここだけ3Dに差し替え可能）
-/// </summary>
 public class DoorView : MonoBehaviour
 {
-    [Header("References")]
     public Image doorImage;
-
-    [Header("Colors")]
     public Color normalColor = Color.white;
     public Color successColor = Color.green;
     public Color failColor = Color.red;
+    public float animationDuration = 0.5f;
 
-    [Header("Animation")]
-    [Range(0.05f, 2f)]
-    public float flashDuration = 0.25f;
+    private Coroutine currentAnimation;
 
-    private Coroutine _routine;
-
-    private void Reset()
+    public void PlayOpenAnimation(Action onComplete)
     {
-        doorImage = GetComponentInChildren<Image>();
+        if (currentAnimation != null) StopCoroutine(currentAnimation);
+        currentAnimation = StartCoroutine(OpenAnimationCoroutine(onComplete));
     }
 
-    public void SetNormal()
+    public void PlayCloseAnimation(Action onComplete)
     {
-        if (_routine != null) StopCoroutine(_routine);
-        if (doorImage != null) doorImage.color = normalColor;
+        if (currentAnimation != null) StopCoroutine(currentAnimation);
+        currentAnimation = StartCoroutine(CloseAnimationCoroutine(onComplete));
     }
 
-    public void FlashSuccess()
+    public void PlayFailAnimation(Action onComplete)
     {
-        // DoorImageが非アクティブなら何もしない
-        if (doorImage == null || !doorImage.gameObject.activeInHierarchy) return;
-        Flash(successColor);
+        if (currentAnimation != null) StopCoroutine(currentAnimation);
+        currentAnimation = StartCoroutine(FailAnimationCoroutine(onComplete));
     }
 
-    public void FlashFail()
+    public void ResetView()
     {
-        // DoorImageが非アクティブなら何もしない
-        if (doorImage == null || !doorImage.gameObject.activeInHierarchy) return;
-        Flash(failColor);
-    }
-
-    private void Flash(Color c)
-    {
-        if (doorImage == null || !doorImage.gameObject.activeInHierarchy) return;
-        if (_routine != null) StopCoroutine(_routine);
-        _routine = StartCoroutine(FlashRoutine(c));
-    }
-
-    private IEnumerator FlashRoutine(Color c)
-    {
-        doorImage.color = c;
-        yield return new WaitForSeconds(flashDuration);
+        if (currentAnimation != null) StopCoroutine(currentAnimation);
         doorImage.color = normalColor;
-        _routine = null;
+        doorImage.transform.localScale = Vector3.one;
+        doorImage.transform.localRotation = Quaternion.identity;
+    }
+
+    private IEnumerator OpenAnimationCoroutine(Action onComplete)
+    {
+        float elapsed = 0f;
+        Quaternion startRot = Quaternion.identity;
+        Quaternion endRot = Quaternion.Euler(0, 90, 0);
+
+        while (elapsed < animationDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / animationDuration;
+            doorImage.color = Color.Lerp(normalColor, successColor, t);
+            doorImage.transform.localRotation = Quaternion.Lerp(startRot, endRot, t);
+            yield return null;
+        }
+
+        doorImage.color = successColor;
+        doorImage.transform.localRotation = endRot;
+        onComplete?.Invoke();
+    }
+
+    private IEnumerator CloseAnimationCoroutine(Action onComplete)
+    {
+        float elapsed = 0f;
+        Quaternion startRot = Quaternion.Euler(0, 90, 0);
+        Quaternion endRot = Quaternion.identity;
+
+        while (elapsed < animationDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / animationDuration;
+            doorImage.color = Color.Lerp(successColor, normalColor, t);
+            doorImage.transform.localRotation = Quaternion.Lerp(startRot, endRot, t);
+            yield return null;
+        }
+
+        doorImage.color = normalColor;
+        doorImage.transform.localRotation = endRot;
+        onComplete?.Invoke();
+    }
+
+    private IEnumerator FailAnimationCoroutine(Action onComplete)
+    {
+        doorImage.color = failColor;
+        
+        for (int i = 0; i < 3; i++)
+        {
+            doorImage.transform.localScale = Vector3.one * 1.1f;
+            yield return new WaitForSeconds(0.1f);
+            doorImage.transform.localScale = Vector3.one;
+            yield return new WaitForSeconds(0.1f);
+        }
+
+        onComplete?.Invoke();
     }
 }
